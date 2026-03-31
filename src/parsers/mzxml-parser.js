@@ -17,7 +17,7 @@ function decodePeaks(peakData, precision = 32, byteOrder = 'network') {
   if (!peakData) return [];
   const raw = Buffer.from(peakData.trim(), 'base64');
   const bytesPerFloat = precision === 64 ? 8 : 4;
-  const count = raw.length / bytesPerFloat;
+  const count = Math.floor(raw.length / bytesPerFloat);
   const values = [];
 
   for (let i = 0; i < count; i++) {

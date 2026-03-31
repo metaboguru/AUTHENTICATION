@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LC-MS Metabolomics Annotator</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;
+  --text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;
+  --yellow:#d29922;--red:#f85149;--purple:#bc8cff;--orange:#ffa657;
+  --authentic:#3fb950;--likely:#a5d6a7;--questionable:#ffa657;--not:#f85149;
+  --font:'Inter','Segoe UI',system-ui,sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;min-height:100vh}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+h1,h2,h3{font-weight:600}
+/* ── Layout ── */
+.app{display:grid;grid-template-rows:auto 1fr;height:100vh}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:12px}
+header svg{flex-shrink:0}
+header h1{font-size:18px;letter-spacing:-.3px}
+header span{color:var(--muted);font-size:13px;margin-left:4px}
+.main{display:grid;grid-template-columns:360px 1fr;overflow:hidden}
+/* ── Sidebar ── */
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
+.section-title{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px}
+/* ── Drop zone ── */
+.dropzone{border:2px dashed var(--border);border-radius:10px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg);position:relative}
+.dropzone:hover,.dropzone.drag{border-color:var(--accent);background:#0d1f35}
+.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dropzone .icon{font-size:32px;margin-bottom:8px}
+.dropzone p{color:var(--muted);font-size:13px;line-height:1.5}
+.dropzone p strong{color:var(--text)}
+.dropzone .file-name{margin-top:10px;padding:6px 10px;background:var(--surface2);border-radius:6px;font-size:12px;color:var(--accent);word-break:break-all;display:none}
+/* ── Controls ── */
+.control-group{display:flex;flex-direction:column;gap:6px}
+.radio-row{display:flex;gap:8px}
+.radio-btn{flex:1;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;text-align:center;cursor:pointer;font-size:13px;transition:all .15s;user-select:none}
+.radio-btn.active{background:#0d1f35;border-color:var(--accent);color:var(--accent)}
+.slider-row{display:flex;align-items:center;gap:10px}
+.slider-row input[type=range]{flex:1;accent-color:var(--accent)}
+.slider-val{min-width:28px;text-align:right;color:var(--accent);font-weight:600}
+/* ── Buttons ── */
+.btn{width:100%;padding:11px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:600;transition:all .2s}
+.btn-primary{background:var(--accent);color:#000}
+.btn-primary:hover{background:#79b8ff}
+.btn-primary:disabled{background:var(--border);color:var(--muted);cursor:not-allowed}
+.btn-demo{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-demo:hover{border-color:var(--accent);color:var(--accent)}
+/* ── Progress ── */
+.progress-box{display:none}
+.progress-box.visible{display:block}
+.phase-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.phase-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:12px;color:var(--muted)}
+.phase-item.active{background:var(--surface2);color:var(--text)}
+.phase-item.done{color:var(--green)}
+.phase-dot{width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0}
+.phase-item.active .phase-dot{background:var(--accent);box-shadow:0 0 6px var(--accent)}
+.phase-item.done .phase-dot{background:var(--green)}
+.progress-bar-wrap{background:var(--surface2);border-radius:999px;height:6px;overflow:hidden}
+.progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--purple));border-radius:999px;transition:width .4s ease;width:0}
+.progress-label{font-size:11px;color:var(--muted);margin-top:5px}
+/* ── Download btns ── */
+.download-row{display:flex;gap:8px;margin-top:4px}
+.btn-dl{flex:1;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:12px;font-weight:600;text-align:center;transition:all .15s}
+.btn-dl:hover{border-color:var(--green);color:var(--green)}
+.btn-dl:disabled{opacity:.4;cursor:not-allowed}
+/* ── Main panel ── */
+.results-panel{overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:24px}
+/* ── Verdict card ── */
+.verdict-card{border-radius:12px;padding:20px 24px;border:1px solid var(--border);display:none}
+.verdict-card.visible{display:flex;gap:20px;align-items:flex-start}
+.verdict-badge{padding:10px 18px;border-radius:8px;font-size:15px;font-weight:700;white-space:nowrap;flex-shrink:0}
+.v-AUTHENTIC{background:#0d2818;color:var(--authentic);border:1px solid #2a5234}
+.v-LIKELY_AUTHENTIC{background:#0d2818;color:var(--likely);border:1px solid #1e4229}
+.v-AUTHENTIC_WITH_ADULTERANT_CONCERN{background:#2d1f00;color:var(--questionable);border:1px solid #5a3e00}
+.v-QUESTIONABLE{background:#2d1f00;color:var(--questionable);border:1px solid #5a3e00}
+.v-NOT_AUTHENTIC{background:#2a0a0a;color:var(--red);border:1px solid #5a1a1a}
+.v-UNDETERMINED{background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
+.verdict-detail{flex:1;min-width:0}
+.verdict-detail h2{font-size:17px;margin-bottom:4px}
+.verdict-detail .species{color:var(--muted);font-size:13px;margin-bottom:8px}
+.verdict-detail .rationale{color:var(--text);font-size:13px;line-height:1.6}
+.verdict-meta{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap}
+.meta-chip{background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:11px;color:var(--muted)}
+.meta-chip span{color:var(--text);font-weight:600}
+/* ── Card ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.card-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+.card-header h3{font-size:13px;display:flex;align-items:center;gap:8px}
+.card-header .count{background:var(--surface2);color:var(--muted);font-size:11px;padding:2px 7px;border-radius:999px;font-weight:400}
+.card-body{overflow:auto}
+.card-body.collapsed{display:none}
+/* ── Tables ── */
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead{position:sticky;top:0;background:var(--surface);z-index:1}
+th{padding:8px 10px;text-align:left;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+.score-high{color:var(--green);font-weight:600}
+.score-med{color:var(--yellow);font-weight:600}
+.score-low{color:var(--muted)}
+.tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600}
+.tag-gnps{background:#0d2535;color:#58a6ff}
+.tag-massbank{background:#1a1a2e;color:#bc8cff}
+.tag-phytochem{background:#0d2818;color:#3fb950}
+/* ── Botanical table ── */
+.botanical-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px}
+.bot-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px}
+.bot-card .rank{font-size:11px;color:var(--muted);margin-bottom:4px}
+.bot-card .name{font-size:14px;font-weight:600;margin-bottom:2px}
+.bot-card .species{font-size:11px;color:var(--muted);font-style:italic;margin-bottom:8px}
+.bot-score-bar{height:4px;background:var(--border);border-radius:999px;overflow:hidden;margin-bottom:8px}
+.bot-score-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:999px}
+.bot-meta{font-size:11px;color:var(--muted);line-height:1.7}
+.bot-meta strong{color:var(--text)}
+.markers-wrap{padding:12px 16px;display:flex;flex-wrap:wrap;gap:6px}
+.marker-chip{padding:3px 8px;border-radius:4px;font-size:11px;background:var(--surface2);border:1px solid var(--border);color:var(--text)}
+.marker-chip.hit{border-color:var(--green);color:var(--green);background:#0d2818}
+.marker-chip.miss{border-color:var(--border);color:var(--muted);text-decoration:line-through}
+/* ── Literature ── */
+.lit-list{display:flex;flex-direction:column;divide-y}
+.lit-item{padding:12px 16px;border-bottom:1px solid var(--border)}
+.lit-item:last-child{border-bottom:none}
+.lit-item .title{font-size:13px;font-weight:500;margin-bottom:3px;line-height:1.4}
+.lit-item .meta{font-size:11px;color:var(--muted)}
+.lit-item .botanicals{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px}
+.lit-bot-tag{padding:1px 6px;background:#0d2818;color:var(--green);border-radius:4px;font-size:10px;border:1px solid #2a5234}
+/* ── Empty states ── */
+.empty-state{padding:40px;text-align:center;color:var(--muted)}
+.empty-state .icon{font-size:36px;margin-bottom:10px}
+/* ── Flags ── */
+.flag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;font-size:11px;background:#2d1f00;color:var(--orange);border:1px solid #5a3e00;margin:2px}
+/* ── Spinner ── */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+/* ── Responsive ── */
+@media(max-width:900px){
+  .main{grid-template-columns:1fr}
+  .sidebar{border-right:none;border-bottom:1px solid var(--border)}
+  .botanical-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <header>
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <circle cx="14" cy="14" r="13" stroke="#58a6ff" stroke-width="1.5"/>
+      <path d="M8 14 Q11 8 14 14 Q17 20 20 14" stroke="#3fb950" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <circle cx="14" cy="14" r="2" fill="#58a6ff"/>
+    </svg>
+    <h1>LC-MS Metabolomics Annotator <span>powered by Ruflo</span></h1>
+  </header>
+
+  <div class="main">
+    <!-- Sidebar -->
+    <div class="sidebar">
+
+      <!-- Upload -->
+      <div>
+        <div class="section-title">Input File</div>
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" accept=".mzXML,.mzxml" />
+          <div class="icon">📂</div>
+          <p><strong>Drop mzXML file here</strong><br>or click to browse</p>
+          <div class="file-name" id="fileName"></div>
+        </div>
+      </div>
+
+      <!-- Polarity -->
+      <div class="control-group">
+        <div class="section-title">Polarity</div>
+        <div class="radio-row">
+          <div class="radio-btn active" data-pol="">Auto</div>
+          <div class="radio-btn" data-pol="POS">POS</div>
+          <div class="radio-btn" data-pol="NEG">NEG</div>
+        </div>
+      </div>
+
+      <!-- Max features -->
+      <div class="control-group">
+        <div class="section-title">Max Features to Process</div>
+        <div class="slider-row">
+          <input type="range" id="maxFeat" min="5" max="100" step="5" value="50"/>
+          <span class="slider-val" id="maxFeatVal">50</span>
+        </div>
+      </div>
+
+      <!-- Run buttons -->
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn btn-primary" id="runBtn" disabled>Run Annotation</button>
+        <button class="btn btn-demo" id="demoBtn">▶ Try Demo (Green Tea)</button>
+      </div>
+
+      <!-- Progress -->
+      <div class="progress-box" id="progressBox">
+        <div class="section-title">Progress</div>
+        <div class="phase-list" id="phaseList">
+          <div class="phase-item" data-phase="0"><div class="phase-dot"></div>Parsing mzXML</div>
+          <div class="phase-item" data-phase="1"><div class="phase-dot"></div>Spectral &amp; DB Annotation</div>
+          <div class="phase-item" data-phase="2"><div class="phase-dot"></div>Literature Search</div>
+          <div class="phase-item" data-phase="3"><div class="phase-dot"></div>Botanical ID &amp; Authenticity</div>
+          <div class="phase-item" data-phase="4"><div class="phase-dot"></div>Report Generation</div>
+        </div>
+        <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+        <div class="progress-label" id="progressLabel">Starting…</div>
+      </div>
+
+      <!-- Downloads -->
+      <div id="downloadSection" style="display:none">
+        <div class="section-title">Download Reports</div>
+        <div class="download-row">
+          <button class="btn-dl" id="dlJson" disabled>⬇ JSON</button>
+          <button class="btn-dl" id="dlTxt" disabled>⬇ Text</button>
+        </div>
+      </div>
+
+      <!-- Instrument info -->
+      <div id="instrBox" style="display:none">
+        <div class="section-title">Instrument</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.8" id="instrInfo"></div>
+      </div>
+
+    </div>
+
+    <!-- Results panel -->
+    <div class="results-panel" id="resultsPanel">
+
+      <!-- Initial empty state -->
+      <div class="empty-state" id="emptyState">
+        <div class="icon">🔬</div>
+        <p style="font-size:15px;font-weight:600;margin-bottom:6px">Upload an mzXML file to begin</p>
+        <p>The workflow will annotate metabolites, identify the botanical<br>source and assess authenticity using multi-agent AI.</p>
+      </div>
+
+      <!-- Verdict card -->
+      <div class="verdict-card" id="verdictCard">
+        <div class="verdict-badge" id="verdictBadge">—</div>
+        <div class="verdict-detail">
+          <h2 id="verdictBotanical">—</h2>
+          <div class="species" id="verdictSpecies"></div>
+          <div class="rationale" id="verdictRationale"></div>
+          <div class="verdict-meta" id="verdictMeta"></div>
+          <div id="flagsRow" style="margin-top:8px"></div>
+        </div>
+      </div>
+
+      <!-- Feature annotations -->
+      <div class="card" id="featuresCard" style="display:none">
+        <div class="card-header" onclick="toggleCard('featuresBody')">
+          <h3>🧪 Feature Annotations <span class="count" id="featureCount">0</span></h3>
+          <span style="color:var(--muted);font-size:12px">▼</span>
+        </div>
+        <div class="card-body" id="featuresBody">
+          <div style="overflow-x:auto">
+          <table id="featTable">
+            <thead><tr>
+              <th>m/z</th><th>RT (min)</th><th>Annotation</th><th>Formula</th>
+              <th>Cosine</th><th>Peaks</th><th>Adduct</th><th>ppm err</th>
+              <th>Superclass</th><th>Source</th><th>PubChem</th>
+            </tr></thead>
+            <tbody id="featTbody"></tbody>
+          </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botanical candidates -->
+      <div class="card" id="botanicalCard" style="display:none">
+        <div class="card-header" onclick="toggleCard('botanicalBody')">
+          <h3>🌿 Botanical Candidates <span class="count" id="botCount">0</span></h3>
+          <span style="color:var(--muted);font-size:12px">▼</span>
+        </div>
+        <div class="card-body" id="botanicalBody">
+          <div class="botanical-grid" id="botGrid"></div>
+          <div style="padding:0 16px 12px">
+            <div class="section-title" style="margin-bottom:8px">Marker Compounds</div>
+            <div class="markers-wrap" id="markersWrap"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Literature -->
+      <div class="card" id="litCard" style="display:none">
+        <div class="card-header" onclick="toggleCard('litBody')">
+          <h3>📚 Literature References <span class="count" id="litCount">0</span></h3>
+          <span style="color:var(--muted);font-size:12px">▼</span>
+        </div>
+        <div class="card-body" id="litBody">
+          <div class="lit-list" id="litList"></div>
+        </div>
+      </div>
+
+    </div><!-- /results-panel -->
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let selectedFile = null;
+let selectedPolarity = '';
+let currentJobId = null;
+let featureRows = [];
+
+// ── File input ────────────────────────────────────────────────────────────────
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileNameEl = document.getElementById('fileName');
+const runBtn = document.getElementById('runBtn');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+function setFile(f) {
+  selectedFile = f;
+  fileNameEl.textContent = f.name;
+  fileNameEl.style.display = 'block';
+  runBtn.disabled = false;
+}
+
+// ── Polarity radio ────────────────────────────────────────────────────────────
+document.querySelectorAll('.radio-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedPolarity = btn.dataset.pol;
+  });
+});
+
+// ── Slider ────────────────────────────────────────────────────────────────────
+const slider = document.getElementById('maxFeat');
+const sliderVal = document.getElementById('maxFeatVal');
+slider.addEventListener('input', () => sliderVal.textContent = slider.value);
+
+// ── Run ───────────────────────────────────────────────────────────────────────
+runBtn.addEventListener('click', () => startJob(false));
+document.getElementById('demoBtn').addEventListener('click', () => startJob(true));
+
+async function startJob(demo) {
+  resetUI();
+
+  const fd = new FormData();
+  if (demo) {
+    fd.append('demo', 'true');
+  } else {
+    if (!selectedFile) return;
+    fd.append('mzxml', selectedFile);
+  }
+  fd.append('polarity', selectedPolarity);
+  fd.append('maxFeatures', slider.value);
+
+  runBtn.disabled = true;
+  document.getElementById('demoBtn').disabled = true;
+  document.getElementById('progressBox').classList.add('visible');
+  document.getElementById('emptyState').style.display = 'none';
+
+  try {
+    const res = await fetch('/annotate', { method: 'POST', body: fd });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Server error'); }
+    const { jobId } = await res.json();
+    currentJobId = jobId;
+    subscribeSSE(jobId);
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+// ── SSE ───────────────────────────────────────────────────────────────────────
+function subscribeSSE(jobId) {
+  const es = new EventSource(`/stream/${jobId}`);
+
+  es.addEventListener('progress', e => {
+    const d = JSON.parse(e.data);
+    updateProgress(d.phase, d.pct, d.label);
+  });
+
+  es.addEventListener('metadata', e => {
+    const { metadata } = JSON.parse(e.data);
+    renderInstrument(metadata);
+  });
+
+  es.addEventListener('features', e => {
+    const { rows } = JSON.parse(e.data);
+    appendFeatureRows(rows);
+  });
+
+  es.addEventListener('literature', e => {
+    const { results } = JSON.parse(e.data);
+    renderLiterature(results);
+  });
+
+  es.addEventListener('botanical', e => {
+    const { candidates, authenticity, pharmacopoeiaInfo } = JSON.parse(e.data);
+    renderBotanical(candidates, authenticity, pharmacopoeiaInfo);
+  });
+
+  es.addEventListener('done', e => {
+    const { jobId } = JSON.parse(e.data);
+    enableDownloads(jobId);
+    runBtn.disabled = false;
+    document.getElementById('demoBtn').disabled = false;
+    es.close();
+  });
+
+  es.addEventListener('error', e => {
+    try {
+      const d = JSON.parse(e.data);
+      showError(d.message);
+    } catch { showError('Connection error'); }
+    runBtn.disabled = false;
+    document.getElementById('demoBtn').disabled = false;
+    es.close();
+  });
+
+  es.onerror = () => {
+    // SSE connection closed after done — normal
+    runBtn.disabled = false;
+    document.getElementById('demoBtn').disabled = false;
+  };
+}
+
+// ── Progress ──────────────────────────────────────────────────────────────────
+function updateProgress(phase, pct, label) {
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = label;
+  document.querySelectorAll('.phase-item').forEach(el => {
+    const p = parseInt(el.dataset.phase);
+    if (p < phase) { el.classList.add('done'); el.classList.remove('active'); }
+    else if (p === phase) { el.classList.add('active'); el.classList.remove('done'); }
+    else { el.classList.remove('active','done'); }
+  });
+}
+
+// ── Feature table ─────────────────────────────────────────────────────────────
+function appendFeatureRows(rows) {
+  featureRows.push(...rows);
+  const tbody = document.getElementById('featTbody');
+  const card = document.getElementById('featuresCard');
+  card.style.display = '';
+
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const cs = r.cosine_score || 0;
+    const csClass = cs >= 0.7 ? 'score-high' : cs >= 0.5 ? 'score-med' : 'score-low';
+    const srcTag = r.source_db === 'GNPS' ? 'tag-gnps' : r.source_db === 'MassBank' ? 'tag-massbank' : 'tag-phytochem';
+    tr.innerHTML = `
+      <td><code style="font-size:11px">${r.mz.toFixed(4)}</code></td>
+      <td>${r.rt_min}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${r.annotation}">${r.annotation}</td>
+      <td><code style="font-size:11px">${r.formula || '—'}</code></td>
+      <td class="${csClass}">${cs ? cs.toFixed(3) : '—'}</td>
+      <td>${r.matched_peaks || '—'}</td>
+      <td style="color:var(--muted);font-size:11px">${r.adduct || '—'}</td>
+      <td style="color:var(--muted)">${r.ppm_error != null ? r.ppm_error.toFixed(1) : '—'}</td>
+      <td style="color:var(--muted);font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis">${r.superclass || '—'}</td>
+      <td><span class="tag ${srcTag}">${r.source_db || '—'}</span></td>
+      <td>${r.pubchem_cid ? `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${r.pubchem_cid}" target="_blank" style="font-size:11px">${r.pubchem_cid}</a>` : '—'}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+  document.getElementById('featureCount').textContent = featureRows.length;
+}
+
+// ── Botanical + Authenticity ──────────────────────────────────────────────────
+function renderBotanical(candidates, auth, pharma) {
+  // Verdict card
+  const vc = document.getElementById('verdictCard');
+  vc.classList.add('visible');
+  const badge = document.getElementById('verdictBadge');
+  const VERDICT_LABELS = {
+    AUTHENTIC: '✅ AUTHENTIC',
+    LIKELY_AUTHENTIC: '✅ LIKELY AUTHENTIC',
+    AUTHENTIC_WITH_ADULTERANT_CONCERN: '⚠️ AUTHENTIC (Adulterant)',
+    QUESTIONABLE: '⚠️ QUESTIONABLE',
+    NOT_AUTHENTIC: '❌ NOT AUTHENTIC',
+    UNDETERMINED: '❓ UNDETERMINED',
+  };
+  badge.textContent = VERDICT_LABELS[auth.verdict] || auth.verdict;
+  badge.className = `verdict-badge v-${auth.verdict}`;
+
+  const top = candidates[0];
+  document.getElementById('verdictBotanical').textContent = top?.botanical || 'Not determined';
+  document.getElementById('verdictSpecies').textContent = top ? `${top.species} · ${top.family}` : '';
+  document.getElementById('verdictRationale').textContent = auth.reason;
+
+  // Meta chips
+  const meta = document.getElementById('verdictMeta');
+  meta.innerHTML = [
+    `<div class="meta-chip">Confidence <span>${(auth.confidence * 100).toFixed(0)}%</span></div>`,
+    `<div class="meta-chip">Coverage <span>${auth.coveragePct}%</span></div>`,
+    top?.pharmacopoeia?.length ? `<div class="meta-chip">Pharmacopoeia <span>${top.pharmacopoeia.join(' / ')}</span></div>` : '',
+  ].join('');
+
+  // Flags
+  const flagsRow = document.getElementById('flagsRow');
+  flagsRow.innerHTML = (auth.flags || []).map(f => `<span class="flag">⚑ ${f.replace(/_/g,' ')}</span>`).join('');
+
+  // Botanical cards
+  const grid = document.getElementById('botGrid');
+  grid.innerHTML = '';
+  candidates.slice(0, 4).forEach((b, i) => {
+    const div = document.createElement('div');
+    div.className = 'bot-card';
+    div.innerHTML = `
+      <div class="rank">#${i+1} Candidate</div>
+      <div class="name">${b.botanical}</div>
+      <div class="species">${b.species}</div>
+      <div class="bot-score-bar"><div class="bot-score-fill" style="width:${(b.score*100).toFixed(0)}%"></div></div>
+      <div class="bot-meta">
+        Score: <strong>${(b.score*100).toFixed(1)}%</strong> &nbsp;|&nbsp;
+        Coverage: <strong>${(b.coverage*100).toFixed(0)}%</strong><br>
+        Family: <strong>${b.family}</strong><br>
+        Parts: <strong>${b.parts?.join(', ') || '—'}</strong><br>
+        ${b.pharmacopoeia?.length ? `Pharmacopoeia: <strong>${b.pharmacopoeia.join(', ')}</strong>` : ''}
+      </div>
+    `;
+    grid.appendChild(div);
+  });
+
+  // Markers
+  const wrap = document.getElementById('markersWrap');
+  wrap.innerHTML = '';
+  if (top) {
+    for (const m of (top.matchedMarkers || [])) {
+      const ch = document.createElement('span');
+      ch.className = 'marker-chip hit';
+      ch.textContent = '✓ ' + m.marker;
+      wrap.appendChild(ch);
+    }
+    for (const m of (top.missedMarkers || [])) {
+      const ch = document.createElement('span');
+      ch.className = 'marker-chip miss';
+      ch.textContent = m;
+      wrap.appendChild(ch);
+    }
+  }
+
+  document.getElementById('botanicalCard').style.display = '';
+  document.getElementById('botCount').textContent = candidates.length;
+}
+
+// ── Literature ────────────────────────────────────────────────────────────────
+function renderLiterature(results) {
+  const list = document.getElementById('litList');
+  list.innerHTML = '';
+  let total = 0;
+
+  for (const compound of (results.byCompound || [])) {
+    for (const art of (compound.articles || []).slice(0, 5)) {
+      total++;
+      const div = document.createElement('div');
+      div.className = 'lit-item';
+      div.innerHTML = `
+        <div class="title">${art.url ? `<a href="${art.url}" target="_blank">${art.title}</a>` : art.title}</div>
+        <div class="meta">${[art.authors, art.journal, art.year].filter(Boolean).join(' · ')}</div>
+        ${art.botanicalMention?.length ? `<div class="botanicals">${art.botanicalMention.map(b=>`<span class="lit-bot-tag">🌿 ${b}</span>`).join('')}</div>` : ''}
+      `;
+      list.appendChild(div);
+    }
+  }
+
+  if (total === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="icon">📄</div><p>No literature references found for these compounds.</p></div>';
+  }
+
+  document.getElementById('litCard').style.display = '';
+  document.getElementById('litCount').textContent = total;
+}
+
+// ── Instrument info ───────────────────────────────────────────────────────────
+function renderInstrument(meta) {
+  const box = document.getElementById('instrBox');
+  box.style.display = '';
+  document.getElementById('instrInfo').innerHTML = [
+    `<b>Instrument:</b> ${meta.instrument.manufacturer} ${meta.instrument.model}`,
+    `<b>Ionisation:</b> ${meta.instrument.ionisation}`,
+    `<b>Analyzer:</b> ${meta.instrument.analyzer}`,
+    `<b>Polarity:</b> ${meta.polarity}`,
+    `<b>Scans:</b> MS1=${meta.ms1Count} MS2=${meta.ms2Count}`,
+    `<b>Features:</b> ${meta.featureCount}`,
+    `<b>RT range:</b> ${(meta.rtRange[0]/60).toFixed(1)}–${(meta.rtRange[1]/60).toFixed(1)} min`,
+  ].join('<br>');
+}
+
+// ── Downloads ─────────────────────────────────────────────────────────────────
+function enableDownloads(jobId) {
+  document.getElementById('downloadSection').style.display = '';
+  const dlJson = document.getElementById('dlJson');
+  const dlTxt = document.getElementById('dlTxt');
+  dlJson.disabled = false;
+  dlTxt.disabled = false;
+  dlJson.onclick = () => window.location = `/download/${jobId}/json`;
+  dlTxt.onclick = () => window.location = `/download/${jobId}/txt`;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function toggleCard(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('collapsed');
+}
+
+function resetUI() {
+  featureRows = [];
+  document.getElementById('featTbody').innerHTML = '';
+  document.getElementById('featureCount').textContent = '0';
+  document.getElementById('featuresCard').style.display = 'none';
+  document.getElementById('botanicalCard').style.display = 'none';
+  document.getElementById('litCard').style.display = 'none';
+  document.getElementById('verdictCard').classList.remove('visible');
+  document.getElementById('downloadSection').style.display = 'none';
+  document.getElementById('instrBox').style.display = 'none';
+  document.getElementById('progressBar').style.width = '0';
+  document.getElementById('progressLabel').textContent = 'Starting…';
+  document.querySelectorAll('.phase-item').forEach(el => el.classList.remove('active','done'));
+}
+
+function showError(msg) {
+  document.getElementById('progressLabel').textContent = '❌ Error: ' + msg;
+  document.getElementById('progressBar').style.background = 'var(--red)';
+  document.getElementById('progressBar').style.width = '100%';
+  runBtn.disabled = false;
+  document.getElementById('demoBtn').disabled = false;
+}
+</script>
+</body>
+</html>
