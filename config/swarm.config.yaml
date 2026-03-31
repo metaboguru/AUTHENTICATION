@@ -1,0 +1,166 @@
+# Ruflo Swarm Configuration — LC-MS Metabolomics Workflow
+# claude-flow@alpha compatible swarm topology
+
+name: lcms-metabolomics-swarm
+version: "1.0.0"
+description: "Multi-agent LC-MS metabolomics annotation with botanical identification and authenticity assessment"
+
+# Swarm topology: hierarchical mesh
+topology:
+  type: hierarchical
+  coordination: consensus
+  fault_tolerance: retry_once
+  timeout_sec: 300
+
+# Queen orchestrator
+queen:
+  id: queen-orchestrator
+  model: claude-sonnet-4-6
+  role: orchestrator
+  memory: persistent
+
+# Worker agents
+workers:
+  - id: spectral-matcher
+    model: claude-haiku-4-5-20251001
+    type: spectral-analysis
+    concurrency: 5
+    timeout_sec: 30
+    retry: 2
+    tools:
+      - gnps-api
+      - massbank-api
+      - internal-phytochem-library
+
+  - id: database-annotator
+    model: claude-haiku-4-5-20251001
+    type: database-query
+    concurrency: 5
+    timeout_sec: 30
+    retry: 2
+    tools:
+      - pubchem-api
+      - hmdb-api
+      - metabolomics-workbench-api
+      - chebi-api
+
+  - id: literature-searcher
+    model: claude-haiku-4-5-20251001
+    type: literature-search
+    concurrency: 3
+    timeout_sec: 45
+    retry: 1
+    tools:
+      - pubmed-api
+      - europe-pmc-api
+      - crossref-api
+
+  - id: botanical-identifier
+    model: claude-sonnet-4-6
+    type: botanical-analysis
+    concurrency: 1
+    timeout_sec: 60
+    tools:
+      - botanical-fingerprint-db
+      - pharmacopoeia-db
+
+  - id: authenticity-assessor
+    model: claude-sonnet-4-6
+    type: quality-assessment
+    concurrency: 1
+    timeout_sec: 60
+    tools:
+      - adulteration-db
+      - pharmacopoeia-db
+      - chemometric-analysis
+
+  - id: report-generator
+    model: claude-haiku-4-5-20251001
+    type: reporting
+    concurrency: 1
+    timeout_sec: 30
+
+# Execution phases
+pipeline:
+  - phase: 1
+    name: "Spectral & Database Annotation"
+    parallel: true
+    agents: [spectral-matcher, database-annotator]
+
+  - phase: 2
+    name: "Literature Search"
+    parallel: false
+    depends_on: [1]
+    agents: [literature-searcher]
+
+  - phase: 3
+    name: "Botanical ID & Authenticity"
+    parallel: true
+    depends_on: [1, 2]
+    agents: [botanical-identifier, authenticity-assessor]
+
+  - phase: 4
+    name: "Report Generation"
+    parallel: false
+    depends_on: [1, 2, 3]
+    agents: [report-generator]
+
+# External API configuration
+apis:
+  gnps:
+    base_url: "https://gnps-external.ucsd.edu"
+    timeout_sec: 15
+    rate_limit: 5  # requests/sec
+
+  massbank:
+    base_url: "https://massbank.eu/MassBank/api"
+    timeout_sec: 15
+    rate_limit: 3
+
+  pubchem:
+    base_url: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+    timeout_sec: 12
+    rate_limit: 5
+
+  hmdb:
+    base_url: "https://hmdb.ca/api/v1"
+    timeout_sec: 12
+    rate_limit: 3
+
+  metabolomics_workbench:
+    base_url: "https://www.metabolomicsworkbench.org/rest"
+    timeout_sec: 12
+    rate_limit: 3
+
+  pubmed:
+    base_url: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+    timeout_sec: 15
+    rate_limit: 3
+    tool: "lcms-metabolomics-workflow"
+
+  europe_pmc:
+    base_url: "https://www.ebi.ac.uk/europepmc/webservices/rest"
+    timeout_sec: 15
+    rate_limit: 5
+
+# Spectral matching parameters
+spectral:
+  mz_tolerance_ppm: 10
+  min_cosine_score: 0.5
+  min_matched_peaks: 3
+  max_results_per_feature: 15
+  adducts:
+    POS: ["[M+H]+", "[M+Na]+", "[M+NH4]+", "[M+K]+", "[M+2H]2+"]
+    NEG: ["[M-H]-", "[M+Cl]-", "[M+HCOO]-", "[M+CH3COO]-", "[M-2H]2-"]
+
+# Botanical identification parameters
+botanical:
+  min_matched_markers: 1
+  authenticity_threshold: 0.6
+  coverage_threshold: 0.3
+
+# Memory / persistence
+memory:
+  backend: sqlite
+  path: "./.lcms-cache/annotation-cache.db"
+  ttl_hours: 24  # Cache API responses for 24h

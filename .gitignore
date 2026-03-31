@@ -1,0 +1,5 @@
+node_modules/
+output/
+.lcms-cache/
+*.log
+.env

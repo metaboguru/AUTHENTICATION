@@ -1,0 +1,26 @@
+{
+  "name": "lcms-metabolomics-workflow",
+  "version": "1.0.0",
+  "description": "High-resolution LC-MS metabolomics workflow for botanical identification and authenticity assessment using ruflo multi-agent orchestration",
+  "type": "module",
+  "main": "src/workflow/index.js",
+  "bin": {
+    "lcms-annotate": "./scripts/annotate.js"
+  },
+  "scripts": {
+    "annotate": "node scripts/annotate.js",
+    "test": "node scripts/test-workflow.js"
+  },
+  "dependencies": {
+    "xml2js": "^0.6.2",
+    "node-fetch": "^3.3.2",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "fast-xml-parser": "^4.4.1",
+    "cli-progress": "^3.12.0",
+    "table": "^6.8.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
